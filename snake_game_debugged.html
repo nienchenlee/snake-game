@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Snake Game - Debugged Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 20px;
+            min-height: 100vh;
+        }
+        
+        .game-container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: inline-block;
+            max-width: 500px;
+        }
+        
+        canvas {
+            border: 3px solid #333;
+            background: #f8f8f8;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .controls {
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            min-width: 100px;
+        }
+        
+        button:hover { background: #45a049; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        
+        .score {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 15px 0;
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 10px;
+        }
+        
+        .game-status {
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .status-ready { background: #e3f2fd; color: #1976d2; }
+        .status-playing { background: #e8f5e8; color: #388e3c; }
+        .status-gameover { background: #ffebee; color: #d32f2f; }
+        
+        .touch-controls {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f0f0f0;
+            border-radius: 15px;
+        }
+        
+        .touch-controls.show { display: block; }
+        
+        .control-pad {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+            gap: 10px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #2196F3;
+            color: white;
+        }
+        
+        .control-btn.center { background: #FF9800; font-size: 18px; }
+        
+        .device-info {
+            background: #e8f5e8;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #856404;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🐍 Snake Game - Debugged</h1>
+        
+        <div class="device-info" id="deviceInfo">Detecting device...</div>
+        <div class="debug-info" id="debugInfo">Debug: Initializing...</div>
+        
+        <div class="score">
+            Score: <span id="score">0</span> | 
+            High Score: <span id="highScore">0</span>
+        </div>
+        
+        <div id="gameStatus" class="game-status status-ready">
+            Ready to play! Click Start Game to begin.
+        </div>
+        
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <div class="controls">
+            <button onclick="startGame()" id="startBtn">Start Game</button>
+            <button onclick="pauseGame()" id="pauseBtn" disabled>Pause</button>
+            <button onclick="restartGame()" id="restartBtn">Restart</button>
+        </div>
+        
+        <div class="touch-controls" id="touchControls">
+            <h3>Touch Controls</h3>
+            <div class="control-pad">
+                <button class="control-btn" id="upBtn">↑</button>
+                <button class="control-btn" id="leftBtn">←</button>
+                <button class="control-btn center" id="pauseBtn2">⏸</button>
+                <button class="control-btn" id="rightBtn">→</button>
+                <button class="control-btn" id="downBtn">↓</button>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; color: #666; text-align: left; padding: 15px; background: #f9f9f9; border-radius: 10px;">
+            <p><strong>How to Play:</strong></p>
+            <p>• <strong>Keyboard:</strong> Arrow keys ↑↓←→</p>
+            <p>• <strong>Touch:</strong> Use control pad or swipe on canvas</p>
+            <p>• <strong>Mouse:</strong> Click and drag on canvas</p>
+            <p>• <strong>Space:</strong> Pause/Resume</p>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        var canvas, ctx, gridSize, tileCount;
+        var snake, food, dx, dy, score, highScore;
+        var gameRunning, gamePaused, gameLoop;
+        var gameSpeed = 150;
+        
+        // Touch variables
+        var touchStartX, touchStartY, touchStartTime;
+        var isTouchDevice = false;
+        var lastTouchTime = 0;
+        
+        // Debug function
+        function debugLog(message) {
+            console.log('[DEBUG]', message);
+            var debugElement = document.getElementById('debugInfo');
+            if (debugElement) {
+                debugElement.textContent = 'Debug: ' + message;
+            }
+        }
+        
+        // Initialize game
+        window.onload = function() {
+            debugLog('Page loaded, initializing...');
+            initializeGame();
+        };
+        
+        function initializeGame() {
+            try {
+                // Get canvas
+                canvas = document.getElementById('gameCanvas');
+                if (!canvas) throw new Error('Canvas not found');
+                
+                ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('2D context not available');
+                
+                // Setup
+                gridSize = 20;
+                tileCount = canvas.width / gridSize;
+                
+                detectDevice();
+                resetGame();
+                setupEventListeners();
+                drawGame();
+                
+                debugLog('Game initialized successfully');
+                
+            } catch (error) {
+                debugLog('ERROR: ' + error.message);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        function detectDevice() {
+            isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            
+            var deviceInfo = document.getElementById('deviceInfo');
+            var touchControls = document.getElementById('touchControls');
+            
+            if (isTouchDevice) {
+                deviceInfo.innerHTML = '📱 Touch device - Touch controls enabled';
+                touchControls.classList.add('show');
+                debugLog('Touch device detected');
+            } else {
+                deviceInfo.innerHTML = '💻 Desktop device - Use keyboard/mouse';
+                debugLog('Desktop device detected');
+            }
+        }
+        
+        function resetGame() {
+            snake = [{x: 10, y: 10}, {x: 9, y: 10}, {x: 8, y: 10}];
+            dx = 1; dy = 0; score = 0;
+            
+            try {
+                highScore = parseInt(localStorage.getItem('snakeHighScore')) || 0;
+            } catch (e) {
+                highScore = 0;
+            }
+            
+            gameRunning = false;
+            gamePaused = false;
+            
+            generateFood();
+            updateScore();
+            updateGameStatus('Ready to play!', 'ready');
+            updateButtons();
+            
+            debugLog('Game reset complete');
+        }
+        
+        function generateFood() {
+            var attempts = 0;
+            do {
+                food = {
+                    x: Math.floor(Math.random() * tileCount),
+                    y: Math.floor(Math.random() * tileCount)
+                };
+                attempts++;
+            } while (isFoodOnSnake() && attempts < 100);
+        }
+        
+        function isFoodOnSnake() {
+            for (var i = 0; i < snake.length; i++) {
+                if (snake[i].x === food.x && snake[i].y === food.y) return true;
+            }
+            return false;
+        }
+        
+        function drawGame() {
+            try {
+                // Clear canvas
+                ctx.fillStyle = '#f8f8f8';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw grid
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 0.5;
+                for (var i = 0; i <= tileCount; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(i * gridSize, 0);
+                    ctx.lineTo(i * gridSize, canvas.height);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, i * gridSize);
+                    ctx.lineTo(canvas.width, i * gridSize);
+                    ctx.stroke();
+                }
+                
+                // Draw snake
+                for (var i = 0; i < snake.length; i++) {
+                    ctx.fillStyle = i === 0 ? '#2E7D32' : '#4CAF50';
+                    var x = snake[i].x * gridSize;
+                    var y = snake[i].y * gridSize;
+                    ctx.fillRect(x + 1, y + 1, gridSize - 2, gridSize - 2);
+                }
+                
+                // Draw food
+                ctx.fillStyle = '#F44336';
+                var x = food.x * gridSize;
+                var y = food.y * gridSize;
+                ctx.fillRect(x + 2, y + 2, gridSize - 4, gridSize - 4);
+                
+            } catch (error) {
+                debugLog('ERROR drawing: ' + error.message);
+            }
+        }
+        
+        function moveSnake() {
+            if (!gameRunning || gamePaused) return;
+            
+            try {
+                var head = {x: snake[0].x + dx, y: snake[0].y + dy};
+                
+                // Wall collision
+                if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                    gameOver('Wall collision!');
+                    return;
+                }
+                
+                // Self collision
+                for (var i = 0; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        gameOver('Self collision!');
+                        return;
+                    }
+                }
+                
+                snake.unshift(head);
+                
+                // Food collision
+                if (head.x === food.x && head.y === food.y) {
+                    score += 10;
+                    updateScore();
+                    generateFood();
+                    debugLog('Food eaten! Score: ' + score);
+                } else {
+                    snake.pop();
+                }
+                
+            } catch (error) {
+                debugLog('ERROR moving: ' + error.message);
+                gameOver('Game error');
+            }
+        }
+        
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+            if (score > highScore) {
+                highScore = score;
+                document.getElementById('highScore').textContent = highScore;
+                try {
+                    localStorage.setItem('snakeHighScore', highScore.toString());
+                } catch (e) {
+                    debugLog('Could not save high score');
+                }
+            }
+        }
+        
+        function updateGameStatus(message, status) {
+            var statusElement = document.getElementById('gameStatus');
+            statusElement.textContent = message;
+            statusElement.className = 'game-status status-' + status;
+        }
+        
+        function updateButtons() {
+            var startBtn = document.getElementById('startBtn');
+            var pauseBtn = document.getElementById('pauseBtn');
+            var restartBtn = document.getElementById('restartBtn');
+            
+            if (gameRunning) {
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                restartBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                restartBtn.disabled = false;
+            }
+        }
+        
+        function startGame() {
+            if (gameRunning) return;
+            
+            try {
+                gameRunning = true;
+                gamePaused = false;
+                
+                updateGameStatus('Game running!', 'playing');
+                updateButtons();
+                
+                gameLoop = setInterval(function() {
+                    moveSnake();
+                    drawGame();
+                }, gameSpeed);
+                
+                debugLog('Game started');
+                
+            } catch (error) {
+                debugLog('ERROR starting: ' + error.message);
+                alert('Error starting game: ' + error.message);
+            }
+        }
+        
+        function pauseGame() {
+            if (!gameRunning) return;
+            
+            try {
+                if (gamePaused) {
+                    gamePaused = false;
+                    updateGameStatus('Game resumed!', 'playing');
+                    document.getElementById('pauseBtn').textContent = 'Pause';
+                    if (document.getElementById('pauseBtn2')) {
+                        document.getElementById('pauseBtn2').textContent = '⏸';
+                    }
+                } else {
+                    gamePaused = true;
+                    updateGameStatus('Game paused', 'playing');
+                    document.getElementById('pauseBtn').textContent = 'Resume';
+                    if (document.getElementById('pauseBtn2')) {
+                        document.getElementById('pauseBtn2').textContent = '▶';
+                    }
+                }
+                debugLog('Game ' + (gamePaused ? 'paused' : 'resumed'));
+            } catch (error) {
+                debugLog('ERROR pausing: ' + error.message);
+            }
+        }
+        
+        function restartGame() {
+            try {
+                if (gameLoop) {
+                    clearInterval(gameLoop);
+                    gameLoop = null;
+                }
+                
+                resetGame();
+                gameSpeed = 150;
+                drawGame();
+                
+                debugLog('Game restarted');
+                
+            } catch (error) {
+                debugLog('ERROR restarting: ' + error.message);
+                alert('Error restarting game: ' + error.message);
+            }
+        }
+        
+        function gameOver(reason) {
+            debugLog('Game over: ' + reason);
+            gameRunning = false;
+            gamePaused = false;
+            
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+            
+            updateGameStatus('Game Over! ' + reason + ' Score: ' + score, 'gameover');
+            updateButtons();
+        }
+        
+        // Touch controls
+        function handleTouchControl(direction) {
+            if (!gameRunning || gamePaused) return;
+            
+            var now = Date.now();
+            if (now - lastTouchTime < 100) return;
+            lastTouchTime = now;
+            
+            debugLog('Touch: ' + direction);
+            
+            switch(direction) {
+                case 'up': if (dy !== 1) { dx = 0; dy = -1; } break;
+                case 'down': if (dy !== -1) { dx = 0; dy = 1; } break;
+                case 'left': if (dx !== 1) { dx = -1; dy = 0; } break;
+                case 'right': if (dx !== -1) { dx = 1; dy = 0; } break;
+            }
+        }
+        
+        function setupEventListeners() {
+            try {
+                // Keyboard
+                document.addEventListener('keydown', function(e) {
+                    if (!gameRunning || gamePaused) return;
+                    
+                    switch(e.key) {
+                        case 'ArrowUp': if (dy !== 1) { dx = 0; dy = -1; } break;
+                        case 'ArrowDown': if (dy !== -1) { dx = 0; dy = 1; } break;
+                        case 'ArrowLeft': if (dx !== 1) { dx = -1; dy = 0; } break;
+                        case 'ArrowRight': if (dx !== -1) { dx = 1; dy = 0; } break;
+                        case ' ': e.preventDefault(); pauseGame(); break;
+                    }
+                });
+                
+                // Touch controls
+                if (isTouchDevice) {
+                    setupTouchControls();
+                }
+                
+                // Mouse controls
+                setupMouseControls();
+                
+                // Prevent defaults
+                window.addEventListener('keydown', function(e) {
+                    if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                        e.preventDefault();
+                    }
+                });
+                
+                debugLog('Event listeners set up');
+                
+            } catch (error) {
+                debugLog('ERROR setting up events: ' + error.message);
+            }
+        }
+        
+        function setupTouchControls() {
+            try {
+                // Touch buttons
+                document.getElementById('upBtn').addEventListener('click', function() {
+                    handleTouchControl('up');
+                });
+                
+                document.getElementById('downBtn').addEventListener('click', function() {
+                    handleTouchControl('down');
+                });
+                
+                document.getElementById('leftBtn').addEventListener('click', function() {
+                    handleTouchControl('left');
+                });
+                
+                document.getElementById('rightBtn').addEventListener('click', function() {
+                    handleTouchControl('right');
+                });
+                
+                document.getElementById('pauseBtn2').addEventListener('click', function() {
+                    pauseGame();
+                });
+                
+                // Swipe gestures
+                canvas.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    var touch = e.touches[0];
+                    touchStartX = touch.clientX;
+                    touchStartY = touch.clientY;
+                    touchStartTime = Date.now();
+                });
+                
+                canvas.addEventListener('touchend', function(e) {
+                    e.preventDefault();
+                    if (!touchStartX || !touchStartY) return;
+                    
+                    var touch = e.changedTouches[0];
+                    var deltaX = touch.clientX - touchStartX;
+                    var deltaY = touch.clientY - touchStartY;
+                    var deltaTime = Date.now() - touchStartTime;
+                    
+                    if (deltaTime < 500 && (Math.abs(deltaX) > 30 || Math.abs(deltaY) > 30)) {
+                        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                            handleTouchControl(deltaX > 0 ? 'right' : 'left');
+                        } else {
+                            handleTouchControl(deltaY > 0 ? 'down' : 'up');
+                        }
+                    }
+                    
+                    touchStartX = null;
+                    touchStartY = null;
+                    touchStartTime = null;
+                });
+                
+                debugLog('Touch controls set up');
+                
+            } catch (error) {
+                debugLog('ERROR setting up touch: ' + error.message);
+            }
+        }
+        
+        function setupMouseControls() {
+            try {
+                var isMouseDown = false;
+                var lastMouseX, lastMouseY;
+                
+                canvas.addEventListener('mousedown', function(e) {
+                    isMouseDown = true;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                });
+                
+                canvas.addEventListener('mousemove', function(e) {
+                    if (!isMouseDown || !gameRunning || gamePaused) return;
+                    
+                    var deltaX = e.clientX - lastMouseX;
+                    var deltaY = e.clientY - lastMouseY;
+                    var minDistance = 20;
+                    
+                    if (Math.abs(deltaX) > minDistance || Math.abs(deltaY) > minDistance) {
+                        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                            if (deltaX > 0 && dx !== -1) { dx = 1; dy = 0; }
+                            else if (deltaX < 0 && dx !== 1) { dx = -1; dy = 0; }
+                        } else {
+                            if (deltaY > 0 && dy !== -1) { dx = 0; dy = 1; }
+                            else if (deltaY < 0 && dy !== 1) { dx = 0; dy = -1; }
+                        }
+                        
+                        lastMouseX = e.clientX;
+                        lastMouseY = e.clientY;
+                    }
+                });
+                
+                canvas.addEventListener('mouseup', function() {
+                    isMouseDown = false;
+                });
+                
+                canvas.addEventListener('mouseleave', function() {
+                    isMouseDown = false;
+                });
+                
+                debugLog('Mouse controls set up');
+                
+            } catch (error) {
+                debugLog('ERROR setting up mouse: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
+
